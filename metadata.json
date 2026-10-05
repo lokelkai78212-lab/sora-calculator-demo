@@ -1,0 +1,7 @@
+{
+  "name": "Singapore SORA Mortgage & Interest Calculator",
+  "description": "Accurate Singapore Overnight Rate Average (SORA) loan & interest payment calculator with MAS compounded rates, rate resets, amortization, and TDSR stress testing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
