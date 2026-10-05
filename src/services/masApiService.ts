@@ -3,7 +3,7 @@ import { HISTORICAL_SORA_DATA, LATEST_MAS_SORA } from '../data/historicalSora';
 
 // MAS official API endpoint
 export const MAS_OFFICIAL_API_URL =
-  'https://eservices.mas.gov.sg/api/action/datastore/search.json?resource_id=9a0bf149-308d-4bd2-832d-7680e64f6b16&limit=60&sort=end_of_day%20desc';
+  'https://eservices.mas.gov.sg/apimg-gw/server/monthly_statistical_bulletin_non610mssql/domestic_interest_rates_daily/views/domestic_interest_rates_daily';
 
 export interface FetchResult {
   rates: MasDailyRate[];
@@ -17,48 +17,40 @@ export interface FetchResult {
 export async function fetchMasRates(config: BackendConfig): Promise<FetchResult> {
   const now = new Date().toLocaleTimeString('en-SG', { timeZone: 'Asia/Singapore', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' SGT';
 
-  // 1. If configured to use custom backend
-  if (config.mode === 'custom-backend' && config.customApiUrl) {
+  // 1. If configured to use serverless endpoint or custom backend
+  if ((config.mode === 'custom-backend' && config.customApiUrl) || config.mode === 'built-in') {
+    const endpoint = config.mode === 'custom-backend' ? config.customApiUrl : '/api/sora';
     try {
       const headers: Record<string, string> = {
         'Accept': 'application/json',
       };
       if (config.apiKey) {
-        headers['Authorization'] = `Bearer ${config.apiKey}`;
+        headers['KeyId'] = config.apiKey;
+        headers['x-mas-key-id'] = config.apiKey;
       }
 
-      const response = await fetch(config.customApiUrl, {
+      const response = await fetch(endpoint, {
         method: 'GET',
         headers,
       });
 
-      if (!response.ok) {
-        throw new Error(`Backend returned HTTP status ${response.status}: ${response.statusText}`);
+      if (response.ok) {
+        const data = await response.json();
+        const parsedRates = normalizeBackendResponse(data);
+        
+        if (parsedRates.length > 0) {
+          return {
+            rates: parsedRates,
+            latest: parsedRates[parsedRates.length - 1],
+            source: 'custom-backend',
+            statusMessage: `Connected to MAS serverless gateway (${endpoint})`,
+            timestamp: now,
+            isFallback: false,
+          };
+        }
       }
-
-      const data = await response.json();
-      const parsedRates = normalizeBackendResponse(data);
-      
-      if (parsedRates.length > 0) {
-        return {
-          rates: parsedRates,
-          latest: parsedRates[parsedRates.length - 1],
-          source: 'custom-backend',
-          statusMessage: `Connected to custom backend (${config.customApiUrl})`,
-          timestamp: now,
-          isFallback: false,
-        };
-      }
-    } catch (err: any) {
-      console.warn('Custom backend failed, using embedded dataset fallback:', err.message);
-      return {
-        rates: HISTORICAL_SORA_DATA,
-        latest: LATEST_MAS_SORA,
-        source: 'embedded-dataset',
-        statusMessage: `Backend unreachable (${err.message}). Using MAS verified rates.`,
-        timestamp: now,
-        isFallback: true,
-      };
+    } catch {
+      // Graceful fallback to verified dataset when local backend or API key is not ready yet
     }
   }
 
